@@ -1,6 +1,6 @@
 // See README.md for license details.
 
-organization := "dtu.compute"
+organization := "tcrest.dtu.compute"
 
 name := "an-ethernet-controller"
 
