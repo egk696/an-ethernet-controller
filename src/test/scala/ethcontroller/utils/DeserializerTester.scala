@@ -1,12 +1,9 @@
 // See README.md for license details.
 
-package hwutils
+package ethcontroller.utils
 
 import Chisel._
-import Chisel.iotesters.PeekPokeTester
-import protocols._
-
-import sys.process._
+import ethcontroller.protocols.{EthernetFrame, EthernetTesting}
 
 class DeserializerTester(dut: Deserializer, frame: EthernetFrame) extends Tester(dut) {
   // Shifting of discrete numbers for clarity
@@ -18,9 +15,9 @@ class DeserializerTester(dut: Deserializer, frame: EthernetFrame) extends Tester
     step(1)
   }
   expect(dut.io.done, true)
+  expect(dut.io.shiftOut, frame.PREAMBLE_END)
   poke(dut.io.en, false)
   step(1)
-  expect(dut.io.shiftOut, frame.PREAMBLE_END)
   poke(dut.io.clr, true)
   step(1)
   expect(dut.countReg, 8/4-1)

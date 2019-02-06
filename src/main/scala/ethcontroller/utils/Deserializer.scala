@@ -1,11 +1,14 @@
 // See README.md for license details.
 
-package hwutils
+package ethcontroller.utils
 
 import Chisel._
 
-/*
- *  Deserialize$inputWidth to M-bit parallel
+/**
+ *  Deserialize an M-bit input to an N-bit output based on a specified order
+  * @param inputWidth the bit width of the serial input
+  * @param outputWidth the bit width of the parallel
+  * @param msbFirst the serial input order
  */
 class Deserializer(msbFirst: Boolean = false, inputWidth: Int = 4, outputWidth: Int = 8) extends Module{
     val io = new Bundle() {
@@ -31,7 +34,7 @@ class Deserializer(msbFirst: Boolean = false, inputWidth: Int = 4, outputWidth: 
         }
     }
 
-    val countReg = Reg(init = UInt((outputWidth/inputWidth-1), width=log2Floor(outputWidth/inputWidth)+1))
+    val countReg = Reg(init = UInt(outputWidth/inputWidth-1, width=log2Floor(outputWidth/inputWidth)+1))
     val doneReg = Reg(init = Bool(false))
 
     // Shift Counter
