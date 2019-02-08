@@ -34,6 +34,7 @@ class MIIRx extends Module{
   val miiDataReg2 = Reg(next=miiDataReg)
   val miiErrReg = Reg(next=io.miiChannel.err)
   val miiErrReg2 = Reg(next=miiErrReg)
+
   /**
     * Flags
     */
@@ -48,7 +49,7 @@ class MIIRx extends Module{
     */
   val deserializePHYByte = Module(new Deserializer(false, 4, 8))
   deserializePHYByte.io.en := io.rxEn & risingMIIEdge & validPHYData
-  deserializePHYByte.io.clr := phyError
+  deserializePHYByte.io.clr := phyError || eofReg
   deserializePHYByte.io.shiftIn := miiDataReg2
   val byteReg = Reg(init = Bits(0, width = 8), next = deserializePHYByte.io.shiftOut)
   val wrByteReg = Reg(init = Bool(false), next = deserializePHYByte.io.done)
@@ -58,7 +59,7 @@ class MIIRx extends Module{
     */
   val deserializePHYBuffer = Module(new Deserializer(true, 8, 64))
   deserializePHYBuffer.io.en := deserializePHYByte.io.done
-  deserializePHYBuffer.io.clr := phyError
+  deserializePHYBuffer.io.clr := phyError || eofReg
   deserializePHYBuffer.io.shiftIn := deserializePHYByte.io.shiftOut
   val regBuffer = Reg(init = Bits(0, width = 64), next = deserializePHYBuffer.io.shiftOut)
   val regBufferDv = Reg(init = Bool(false), next = deserializePHYBuffer.io.done)
