@@ -1,8 +1,10 @@
+// See README.md for license details.
+
 package ethcontroller.interfaces
 
 import Chisel.{Bool, Bundle, INPUT, OUTPUT}
 
-class PHYChannel extends Bundle{
+class PHYChannel extends Bundle {
   /** Management data clock to the PHY */
   val mdc = Bool(OUTPUT)
   /** Management output data */

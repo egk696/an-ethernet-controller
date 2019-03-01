@@ -1,3 +1,5 @@
+// See README.md for license details.
+
 package ethcontroller.design
 
 import Chisel.{Module, Tester, chiselMainTest}
@@ -7,14 +9,14 @@ import scala.sys.process._
 
 class EthRxControllerTester(dut: EthRxController, frame: EthernetFrame, injectNoFrames: Int) extends Tester(dut) {
 
-  def initPHY2MIIData(clockDiv: Int): Unit ={
+  def initPHY2MIIData(clockDiv: Int): Unit = {
     poke(dut.io.miiChannel.col, 0)
     poke(dut.io.miiChannel.crs, 0)
     poke(dut.io.miiChannel.clk, 0)
     step(clockDiv)
   }
 
-  def txPHY2MIIData(nibble: Int, clockDiv: Int): Unit ={
+  def txPHY2MIIData(nibble: Int, clockDiv: Int): Unit = {
     poke(dut.io.miiChannel.dv, 1)
     poke(dut.io.miiChannel.data, nibble)
     poke(dut.io.miiChannel.clk, 0)
@@ -23,7 +25,7 @@ class EthRxControllerTester(dut: EthRxController, frame: EthernetFrame, injectNo
     step(clockDiv)
   }
 
-  def stopTxPHY2MII(clockDiv: Int): Unit ={
+  def stopTxPHY2MII(clockDiv: Int): Unit = {
     poke(dut.io.miiChannel.dv, 0)
     poke(dut.io.miiChannel.clk, 0)
     step(clockDiv)
@@ -31,7 +33,7 @@ class EthRxControllerTester(dut: EthRxController, frame: EthernetFrame, injectNo
     step(clockDiv)
   }
 
-  def peekEthRxStatus(): Unit ={
+  def peekEthRxStatus(): Unit = {
     peek(dut.stateReg)
     peek(dut.ethByteReg)
     peek(dut.ethByteDvReg)
@@ -41,7 +43,7 @@ class EthRxControllerTester(dut: EthRxController, frame: EthernetFrame, injectNo
     peek(dut.fifoFullReg)
   }
 
-  def testSingleFrameReception(frame: EthernetFrame, initTime: Long): Unit ={
+  def testSingleFrameReception(frame: EthernetFrame, initTime: Long): Unit = {
     initPHY2MIIData(4)
     println("Testing preamble")
     for (nibble <- frame.preambleNibbles) {
@@ -71,12 +73,12 @@ class EthRxControllerTester(dut: EthRxController, frame: EthernetFrame, injectNo
     * Testing EthernetRxController
     */
   println("Test Starting...")
-  var time : Long = 0x53C38A1000000000L
-  for(i <- 0 until injectNoFrames){
+  var time: Long = 0x53C38A1000000000L
+  for (i <- 0 until injectNoFrames) {
     println("...")
     println("TEST FRAME ITERATION #" + i + " at t = " + time.toHexString)
     testSingleFrameReception(frame, time)
-    println("END TEST FRAME ITERATION #"+ i + " at t = " + time.toHexString)
+    println("END TEST FRAME ITERATION #" + i + " at t = " + time.toHexString)
     step(1)
     step(1)
     println("...")
@@ -85,7 +87,7 @@ class EthRxControllerTester(dut: EthRxController, frame: EthernetFrame, injectNo
 
 }
 
-object EthRxControllerTester extends App{
+object EthRxControllerTester extends App {
   private val pathToVCD = "generated/" + this.getClass.getSimpleName.dropRight(1)
   private val nameOfVCD = this.getClass.getSimpleName.dropRight(7) + ".vcd"
 

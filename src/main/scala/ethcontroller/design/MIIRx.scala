@@ -1,3 +1,5 @@
+// See README.md for license details.
+
 package ethcontroller.design
 
 import Chisel._
@@ -5,7 +7,7 @@ import ethcontroller.interfaces.MIIChannel
 import ethcontroller.protocols.EthernetConstants
 import ethcontroller.utils.Deserializer
 
-class MIIRx extends Module{
+class MIIRx extends Module {
   val io = new Bundle() {
     val miiChannel = new MIIChannel().asInput()
     val rxEn = Bool(INPUT)
@@ -26,14 +28,14 @@ class MIIRx extends Module{
   /**
     * Sampling clock and line of MII
     */
-  val miiClkReg = Reg(next=io.miiChannel.clk)
-  val miiClkReg2 = Reg(next=miiClkReg)
-  val miiDvReg = Reg(next=io.miiChannel.dv)
-  val miiDvReg2 = Reg(next=miiDvReg)
-  val miiDataReg = Reg(next=io.miiChannel.data)
-  val miiDataReg2 = Reg(next=miiDataReg)
-  val miiErrReg = Reg(next=io.miiChannel.err)
-  val miiErrReg2 = Reg(next=miiErrReg)
+  val miiClkReg = Reg(next = io.miiChannel.clk)
+  val miiClkReg2 = Reg(next = miiClkReg)
+  val miiDvReg = Reg(next = io.miiChannel.dv)
+  val miiDvReg2 = Reg(next = miiDvReg)
+  val miiDataReg = Reg(next = io.miiChannel.data)
+  val miiDataReg2 = Reg(next = miiDataReg)
+  val miiErrReg = Reg(next = io.miiChannel.err)
+  val miiErrReg2 = Reg(next = miiErrReg)
 
   /**
     * Flags
@@ -68,12 +70,12 @@ class MIIRx extends Module{
     * Ethernet frame detection logic
     */
   sofReg := false.B
-  when(regBuffer === EthernetConstants.constSFD && regBufferDv){
+  when(regBuffer === EthernetConstants.constSFD && regBufferDv) {
     sofReg := true.B
   }
 
   eofReg := false.B
-  when(validPHYDataReg && ~validPHYData){
+  when(validPHYDataReg && ~validPHYData) {
     eofReg := true.B
   }
 
