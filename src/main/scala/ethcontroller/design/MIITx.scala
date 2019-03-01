@@ -39,7 +39,7 @@ class MIITx extends Module {
     */
   val phyNA = io.miiChannel.col & ~io.miiChannel.crs
   val phyError = phyNA || miiErrReg2
-  val fallingMIIEdge = ~miiClkReg & miiClkReg2 //we check the falling so that when the rising arrives on the next rising the data will be available to the PHY
+  val miiClkEdge = miiClkReg & ~miiClkReg2 //we check the falling so that when the rising arrives on the next rising the data will be available to the PHY
 
 
   /**
@@ -54,7 +54,7 @@ class MIITx extends Module {
     */
   serializeByteToNibble.io.load := serializeDataToByte.io.dv
   serializeByteToNibble.io.shiftIn := serializeDataToByte.io.shiftOut
-  serializeByteToNibble.io.en := fallingMIIEdge
+  serializeByteToNibble.io.en := miiClkEdge
 
   /**
     * Interface control and automatic PREAMBLE/IFG injection
@@ -65,7 +65,7 @@ class MIITx extends Module {
     busyReg := false.B
   }
 
-  when(fallingMIIEdge) {
+  when(miiClkEdge) {
     //(De-)Assert MII data valid
     when(busyReg) {
       miiDvReg := true.B

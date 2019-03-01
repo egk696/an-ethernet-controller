@@ -21,12 +21,27 @@ class MIITxTester(dut: MIITx, frame: EthernetFrame) extends Tester(dut) {
     step(1)
     poke(dut.io.macDataDv, false)
   }
-  for(i <- 0 until frame.preambleNibbles.length+2) {
+  for(_ <- 0 to frame.preambleNibbles.length) {
+    if(peek(dut.io.busy) == 0){
+      poke(dut.io.macDataDv, true)
+      poke(dut.io.macData, BigInt(frame.dstMac))
+      step(1)
+      poke(dut.io.macDataDv, false)
+    }
     poke(dut.io.miiChannel.clk, 0)
     step(2)
     poke(dut.io.miiChannel.clk, 1)
     step(2)
   }
+  for(_ <- 0 to frame.dstMacNibbles.length+4){
+    poke(dut.io.miiChannel.clk, 0)
+    step(2)
+    poke(dut.io.miiChannel.clk, 1)
+    step(2)
+  }
+  expect(dut.serializeDataToByte.io.done, true)
+  expect(dut.serializeByteToNibble.io.done, true)
+  expect(dut.io.miiChannel.dv, false)
 }
 
 object MIITxTester extends App {
