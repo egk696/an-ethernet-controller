@@ -7,6 +7,13 @@ import ethcontroller.interfaces.MIIChannel
 import ethcontroller.protocols.EthernetConstants
 import ocp._
 
+/**
+  * The RX channel of the Ethernet controller manages both
+  * the RX MII channel and implements FIFO access to the connected buffers
+  *
+  * @param numFrameBuffers the numbers of buffers used
+  * @param timeStampWidth the timestamp bit-width
+  */
 class EthRxController(numFrameBuffers: Int, timeStampWidth: Int) extends Module {
   val io = new Bundle() {
     val ocp = new OcpCoreSlavePort(32, 32)
@@ -26,7 +33,7 @@ class EthRxController(numFrameBuffers: Int, timeStampWidth: Int) extends Module 
   val miiRx = Module(new MIIRx())
 
   /**
-    * Registers and devices insta
+    * Registers
     */
   val stateReg = Reg(init = sWaitSFD)
   val ethByteReg = RegEnable(miiRx.io.ethByte, miiRx.io.ethByteDv)
@@ -56,7 +63,6 @@ class EthRxController(numFrameBuffers: Int, timeStampWidth: Int) extends Module 
     "fifoPop" -> Map("Reg" -> fifoPopReg, "Addr" -> Bits("h04")),
     "macRxFilter" -> Map("Reg" -> macRxFilterReg, "Addr" -> Bits("h05"))
   )
-
 
   /**
     * Fifo Management

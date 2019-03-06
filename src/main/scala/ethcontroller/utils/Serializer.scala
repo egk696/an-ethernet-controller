@@ -22,11 +22,12 @@ class Serializer(msbFirst: Boolean = false, inputWidth: Int = 8, outputWidth: In
   }
 
   val constShiftStages = inputWidth / outputWidth
-
   val shiftReg = Reg(init = Bits(0, width = inputWidth))
   val busyReg = Reg(init = Bool(false))
   val doneReg = Reg(init = Bool(false))
   val countReg = Reg(init = UInt(constShiftStages - 1, width = log2Floor(constShiftStages) + 1))
+  val selHi = UInt()
+  val selLo = UInt()
 
   // Shift-register
   when(~busyReg && io.load) {
@@ -37,19 +38,26 @@ class Serializer(msbFirst: Boolean = false, inputWidth: Int = 8, outputWidth: In
     when(countReg === 0.U) {
       countReg := (constShiftStages - 1).U
       doneReg := true.B
-      busyReg := false.B
     }.otherwise {
       countReg := countReg - 1.U
       doneReg := false.B
     }
+  }.elsewhen(doneReg){
+    busyReg := false.B
   }
 
   if (msbFirst) {
-    io.shiftOut := shiftReg(countReg*outputWidth.U+outputWidth.U-1.U, countReg*outputWidth.U)
+    selHi := countReg*outputWidth.U+outputWidth.U-1.U
+    selLo := countReg*outputWidth.U
   } else {
-    io.shiftOut := shiftReg((constShiftStages.U-1.U-countReg)*outputWidth.U+outputWidth.U-1.U, (constShiftStages.U-1.U-countReg)*outputWidth.U)
+    selHi := (constShiftStages.U-1.U-countReg)*outputWidth.U+outputWidth.U-1.U
+    selLo := (constShiftStages.U-1.U-countReg)*outputWidth.U
   }
 
+  /**
+    * I/O plumbing
+    */
+  io.shiftOut := shiftReg(selHi, selLo)
   io.done := doneReg
   io.dv := busyReg
 }

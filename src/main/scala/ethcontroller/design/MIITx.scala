@@ -2,35 +2,33 @@ package ethcontroller.design
 
 import Chisel._
 import ethcontroller.interfaces.MIIChannel
-import ethcontroller.utils.Serializer
+import ethcontroller.utils.{ExtClockSampler, Serializer}
 
+/**
+  * The TX MII channel manages the reception of bytes from the PHY
+  */
 class MIITx extends Module {
   val io = new Bundle() {
     val miiChannel = new MIIChannel()
     val startTx = Bool(INPUT)
     val endTx = Bool(INPUT)
-    val busy = Bool(OUTPUT)
     val macDataDv = Bool(INPUT)
-    val macData = Bits(INPUT, width = 64)
+    val macData = Bits(INPUT, width = 8)
+    val ready = Bool(OUTPUT)
     val phyErr = Bool(OUTPUT)
   }
 
   /**
     * Registers and components
     */
-  val busyReg = Reg(init = false.B)
-  val startTxReg = Reg(init = false.B)
-
-  val serializeDataToByte = Module(new Serializer(false, 64, 8))
-  val serializeByteToNibble = Module(new Serializer(false, 8, 4))
+  val transmittingReg = Reg(init = false.B)
 
   /**
     * Sampling clock and line of MII
     */
-  val miiClkReg = Reg(next = io.miiChannel.clk)
-  val miiClkReg2 = Reg(next = miiClkReg)
-  val miiErrReg = Reg(next = io.miiChannel.err)
-  val miiErrReg2 = Reg(next = miiErrReg)
+  val miiClkSampler = Module(new ExtClockSampler(true, 2))
+  miiClkSampler.io.extClk := io.miiChannel.clk
+  val miiErrSyncedReg = ShiftRegister(io.miiChannel.err, 2)
   val miiDataReg = Reg(init = UInt(0, width = 4))
   val miiDvReg = Reg(init = false.B)
 
@@ -38,38 +36,31 @@ class MIITx extends Module {
     * Flags
     */
   val phyNA = io.miiChannel.col & ~io.miiChannel.crs
-  val phyError = phyNA || miiErrReg2
-  val miiClkEdge = miiClkReg & ~miiClkReg2 //we check the falling so that when the rising arrives on the next rising the data will be available to the PHY
-
-
-  /**
-    * Serialize Preamble to Byte
-    */
-  serializeDataToByte.io.load := io.macDataDv
-  serializeDataToByte.io.shiftIn := io.macData
-  serializeDataToByte.io.en := ~serializeByteToNibble.io.dv
+  val phyError = phyNA || miiErrSyncedReg
+  val miiClkEdge = miiClkSampler.io.sampledClk
 
   /**
     * Serialize Output to Nibble
     */
-  serializeByteToNibble.io.load := serializeDataToByte.io.dv
-  serializeByteToNibble.io.shiftIn := serializeDataToByte.io.shiftOut
+  val serializeByteToNibble = Module(new Serializer(false, 8, 4))
+  serializeByteToNibble.io.load := io.macDataDv
+  serializeByteToNibble.io.shiftIn := io.macData
   serializeByteToNibble.io.en := miiClkEdge
 
-  /**
-    * Interface control and automatic PREAMBLE/IFG injection
-    */
-  when(io.startTx) {
-    busyReg := true.B
-  }.elsewhen(RegNext(serializeDataToByte.io.done) && RegNext(serializeByteToNibble.io.done)) {
-    busyReg := false.B
+  when(~transmittingReg && serializeByteToNibble.io.dv) {
+    transmittingReg := true.B
+  }.elsewhen(io.endTx && serializeByteToNibble.io.done) {
+    transmittingReg := false.B
   }
 
+  /**
+    * Place data on the falling MII clock edge so that they are available on the rising edge
+    */
   when(miiClkEdge) {
     //(De-)Assert MII data valid
-    when(busyReg) {
+    when(transmittingReg) {
       miiDvReg := true.B
-    }.elsewhen(~busyReg) {
+    }.elsewhen(~transmittingReg) {
       miiDvReg := false.B
     }
     //Data nibble
@@ -79,9 +70,9 @@ class MIITx extends Module {
   /**
     * I/O plumbing
     */
-  io.busy := serializeDataToByte.io.dv
-  io.phyErr := phyNA
+  io.ready := ~transmittingReg || ~serializeByteToNibble.io.dv
   io.miiChannel.data := miiDataReg
   io.miiChannel.dv := miiDvReg
+  io.phyErr := phyNA
 
 }

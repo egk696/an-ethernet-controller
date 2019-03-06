@@ -9,39 +9,46 @@ import scala.sys.process._
 
 class MIITxTester(dut: MIITx, frame: EthernetFrame) extends Tester(dut) {
   // Shifting of discrete numbers for clarity
+  var byteAddr = 0
   poke(dut.io.startTx, true)
-  poke(dut.io.miiChannel.dv, 1)
   poke(dut.io.miiChannel.clk, 0)
-  step(1)
+  step(3)
   poke(dut.io.startTx, false)
-  println("(Testing preamble)")
-  if(peek(dut.io.busy) == 0){
-    poke(dut.io.macDataDv, true)
-    poke(dut.io.macData, BigInt(frame.preamble))
+  println("-- Testing the preamble")
+  while(byteAddr < frame.preamble.length){
+    if(peek(dut.io.ready) == 1){
+      poke(dut.io.macDataDv, true)
+      poke(dut.io.macData, BigInt(frame.preamble(byteAddr)))
+      byteAddr+=1
+    }
+    peek(dut.serializeByteToNibble.selHi)
+    peek(dut.serializeByteToNibble.selLo)
+    poke(dut.io.miiChannel.clk, 0)
     step(1)
     poke(dut.io.macDataDv, false)
-  }
-  for(_ <- 0 to frame.preambleNibbles.length) {
-    if(peek(dut.io.busy) == 0){
-      poke(dut.io.macDataDv, true)
-      poke(dut.io.macData, BigInt(frame.dstMac))
-      step(1)
-      poke(dut.io.macDataDv, false)
-    }
-    poke(dut.io.miiChannel.clk, 0)
     step(2)
     poke(dut.io.miiChannel.clk, 1)
-    step(2)
+    step(3)
   }
-  for(_ <- 0 to frame.dstMacNibbles.length+4){
+  while(peek(dut.io.ready) == 0){
     poke(dut.io.miiChannel.clk, 0)
-    step(2)
+    step(3)
     poke(dut.io.miiChannel.clk, 1)
-    step(2)
+    step(3)
   }
-  expect(dut.serializeDataToByte.io.done, true)
-  expect(dut.serializeByteToNibble.io.done, true)
-  expect(dut.io.miiChannel.dv, false)
+  poke(dut.io.endTx, true)
+  poke(dut.io.miiChannel.clk, 0)
+  step(1)
+  poke(dut.io.endTx, true)
+  step(2)
+  poke(dut.io.miiChannel.clk, 1)
+  step(3)
+  poke(dut.io.miiChannel.clk, 0)
+  step(3)
+  poke(dut.io.miiChannel.clk, 1)
+  step(3)
+  expect(dut.io.miiChannel.dv, false, "Expecting an idle bus")
+  expect(dut.serializeByteToNibble.io.done, true, "Expecting the serializer to have finished")
 }
 
 object MIITxTester extends App {

@@ -47,25 +47,25 @@ class EthRxControllerTester(dut: EthRxController, frame: EthernetFrame, injectNo
     initPHY2MIIData(4)
     println("Testing preamble")
     for (nibble <- frame.preambleNibbles) {
-      txPHY2MIIData(nibble, 4)
+      txPHY2MIIData(nibble, 6)
       peek(dut.miiRx.deserializePHYByte.doneReg)
       peek(dut.miiRx.deserializePHYByte.shiftReg)
       peek(dut.miiRx.regBuffer)
     }
     println("Testing MAC")
     for (nibble <- frame.dstMacNibbles ++ frame.srcMacNibbles ++ frame.ethTypeNibbles) {
-      txPHY2MIIData(nibble, 4)
+      txPHY2MIIData(nibble, 6)
       peekEthRxStatus()
     }
     println("Testing Raw Ethernet frame II payload")
     for (payloadData <- 0 until 45) {
       for (nibble <- EthernetUtils.byteToNibble(payloadData, true)) {
-        txPHY2MIIData(nibble, 4)
+        txPHY2MIIData(nibble, 6)
         peekEthRxStatus()
       }
     }
     println("Testing EoF")
-    stopTxPHY2MII(4)
+    stopTxPHY2MII(6)
     peekEthRxStatus()
   }
 

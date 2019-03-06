@@ -5,8 +5,11 @@ package ethcontroller.design
 import Chisel._
 import ethcontroller.interfaces.MIIChannel
 import ethcontroller.protocols.EthernetConstants
-import ethcontroller.utils.Deserializer
+import ethcontroller.utils.{Deserializer, ExtClockSampler}
 
+/**
+  * The RX MII channel manages the reception of bytes from the PHY
+  */
 class MIIRx extends Module {
   val io = new Bundle() {
     val miiChannel = new MIIChannel().asInput()
@@ -28,23 +31,20 @@ class MIIRx extends Module {
   /**
     * Sampling clock and line of MII
     */
-  val miiClkReg = Reg(next = io.miiChannel.clk)
-  val miiClkReg2 = Reg(next = miiClkReg)
-  val miiDvReg = Reg(next = io.miiChannel.dv)
-  val miiDvReg2 = Reg(next = miiDvReg)
-  val miiDataReg = Reg(next = io.miiChannel.data)
-  val miiDataReg2 = Reg(next = miiDataReg)
-  val miiErrReg = Reg(next = io.miiChannel.err)
-  val miiErrReg2 = Reg(next = miiErrReg)
+  val miiClkSampler = Module(new ExtClockSampler(true, 2))
+  miiClkSampler.io.extClk := io.miiChannel.clk
+  val miiDvSyncedReg = ShiftRegister(io.miiChannel.dv, 2)
+  val miiDataSyncedReg = ShiftRegister(io.miiChannel.data, 2)
+  val miiErrSyncedReg = ShiftRegister(io.miiChannel.err, 2)
 
   /**
     * Flags
     */
   val phyNA = io.miiChannel.col & ~io.miiChannel.crs
-  val phyError = phyNA || miiErrReg2
-  val validPHYData = miiDvReg2 & ~miiErrReg2 & ~phyNA
+  val phyError = phyNA || miiErrSyncedReg
+  val validPHYData = miiDvSyncedReg & ~miiErrSyncedReg & ~phyNA
   validPHYDataReg := validPHYData
-  val risingMIIEdge = miiClkReg & ~miiClkReg2
+  val risingMIIEdge = miiClkSampler.io.sampledClk
 
   /**
     * Buffering PHY bytes
@@ -52,7 +52,7 @@ class MIIRx extends Module {
   val deserializePHYByte = Module(new Deserializer(false, 4, 8))
   deserializePHYByte.io.en := io.rxEn & risingMIIEdge & validPHYData
   deserializePHYByte.io.clr := phyError || eofReg
-  deserializePHYByte.io.shiftIn := miiDataReg2
+  deserializePHYByte.io.shiftIn := miiDataSyncedReg
   val byteReg = Reg(init = Bits(0, width = 8), next = deserializePHYByte.io.shiftOut)
   val wrByteReg = Reg(init = Bool(false), next = deserializePHYByte.io.done)
 
