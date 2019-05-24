@@ -7,6 +7,7 @@ import Chisel._
 /**
   * Serializes an M-bit input to an N-bit output based on a specified order
   * after an initial load
+  *
   * @param inputWidth  the bit width of the parallel input
   * @param outputWidth the bit width of the serial output
   * @param msbFirst    the serial output order
@@ -42,16 +43,16 @@ class Serializer(msbFirst: Boolean = false, inputWidth: Int = 8, outputWidth: In
       countReg := countReg - 1.U
       doneReg := false.B
     }
-  }.elsewhen(doneReg){
+  }.elsewhen(doneReg) {
     busyReg := false.B
   }
 
   if (msbFirst) {
-    selHi := countReg*outputWidth.U+outputWidth.U-1.U
-    selLo := countReg*outputWidth.U
+    selHi := countReg * outputWidth.U + outputWidth.U - 1.U
+    selLo := countReg * outputWidth.U
   } else {
-    selHi := (constShiftStages.U-1.U-countReg)*outputWidth.U+outputWidth.U-1.U
-    selLo := (constShiftStages.U-1.U-countReg)*outputWidth.U
+    selHi := (constShiftStages.U - 1.U - countReg) * outputWidth.U + outputWidth.U - 1.U
+    selLo := (constShiftStages.U - 1.U - countReg) * outputWidth.U
   }
 
   /**

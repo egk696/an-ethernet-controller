@@ -12,9 +12,9 @@ import ocp._
   * the TX MII channel and implements FIFO access to the connected buffers
   *
   * @param numFrameBuffers the numbers of buffers used
-  * @param timeStampWidth the timestamp bit-width
+  * @param timeStampWidth  the timestamp bit-width
   */
-class EthTxController(numFrameBuffers: Int, timeStampWidth: Int) {
+class EthTxController(numFrameBuffers: Int, timeStampWidth: Int) extends Module {
   val io = new Bundle() {
     val ocp = new OcpCoreSlavePort(32, 32)
     val ramPorts = Vec.fill(numFrameBuffers) {
@@ -24,49 +24,245 @@ class EthTxController(numFrameBuffers: Int, timeStampWidth: Int) {
     val rtcTimestamp = UInt(INPUT, width = timeStampWidth)
   }
 
+
   /**
     * Constants and types defs
     */
   val constRamIdWidth = log2Ceil(numFrameBuffers)
   val constRamAddrWidth = log2Ceil(EthernetConstants.constEthFrameLength)
-  val sWaitSFD :: stCollectPayload :: Nil = Enum(UInt(), 2)
+  val stWait :: stSoF :: stTxPreamble :: stTxFrame :: stTxFCS :: stIFG :: stEoF :: Nil = Enum(UInt(), 7)
   val miiTx = Module(new MIITx())
 
   /**
     * Registers
     */
-  val stateReg = Reg(init = sWaitSFD)
-  val ethByteReg = RegEnable(miiRx.io.ethByte, miiRx.io.ethByteDv)
-  val ethByteDvReg = Reg(next = miiRx.io.ethByteDv)
+  val stateReg = Reg(init = stWait)
   val ocpMasterReg = Reg(next = io.ocp.M)
   val wrRamIdReg = Reg(init = UInt(0, width = constRamIdWidth))
   val rdRamIdReg = Reg(init = UInt(0, width = constRamIdWidth))
   val byteCntReg = Reg(init = UInt(0, width = constRamAddrWidth))
+  val ethRamRdEn = Reg(init = false.B)
   val ramMasterRegs = Vec.fill(numFrameBuffers) {
     Reg(new OcpCoreMasterSignals(constRamAddrWidth, 32))
   }
-  val dataReg = Reg(init = Bits(0, width = 32))
-  val respReg = Reg(init = OcpResp.NULL)
+  val ocpDataReg = Reg(init = Bits(0, width = 32))
+  val ocpRespReg = Reg(init = OcpResp.NULL)
 
-  val rxEnReg = Reg(init = Bool(true))
+  val ramDataReg = Reg(init = Bits(0, width = 32))
+  val ramRespReg = Reg(init = OcpResp.NULL)
+
+  val txEnReg = Reg(init = true.B)
+  val txFrameSizeReg = Reg(init = UInt(0, width = constRamAddrWidth)) //bytes
   val fifoCountReg = Reg(init = UInt(0, width = constRamIdWidth + 1))
-  val fifoEmptyReg = Reg(init = Bool(true))
-  val fifoFullReg = Reg(init = Bool(false))
-  val fifoPopReg = Reg(init = Bool(false))
+  val fifoEmptyReg = Reg(init = true.B)
+  val fifoFullReg = Reg(init = false.B)
+  val fifoPopReg = Reg(init = false.B)
+  val fifoPushReg = Reg(init = false.B)
   val macRxFilterReg = Reg(init = UInt(0, width = EthernetConstants.constEthMacLength))
 
-  val ethRxCtrlRegMap = Map(
-    "rxEn" -> Map("Reg" -> rxEnReg, "Addr" -> Bits("h00")),
-    "fifoCount" -> Map("Reg" -> fifoCountReg, "Addr" -> Bits("h01")),
-    "fifoEmpty" -> Map("Reg" -> fifoEmptyReg, "Addr" -> Bits("h02")),
-    "fifoFull" -> Map("Reg" -> fifoFullReg, "Addr" -> Bits("h03")),
-    "fifoPop" -> Map("Reg" -> fifoPopReg, "Addr" -> Bits("h04")),
-    "macRxFilter" -> Map("Reg" -> macRxFilterReg, "Addr" -> Bits("h05"))
+  val ethTxCtrlRegMap = Map(
+    "txEn" -> Map("Reg" -> txEnReg, "Addr" -> Bits("h00")), //0x0
+    "frameSize" -> Map("Reg" -> txFrameSizeReg, "Addr" -> Bits("h01")), //0x4
+    "fifoCount" -> Map("Reg" -> fifoCountReg, "Addr" -> Bits("h02")), //0x8
+    "fifoEmpty" -> Map("Reg" -> fifoEmptyReg, "Addr" -> Bits("h03")), //0xC
+    "fifoFull" -> Map("Reg" -> fifoFullReg, "Addr" -> Bits("h04")), //0x10
+    "fifoPop" -> Map("Reg" -> fifoPopReg, "Addr" -> Bits("h05")), //0x14
+    "fifoPush" -> Map("Reg" -> fifoPushReg, "Addr" -> Bits("h06")), //0x18
+    "macFilter" -> Map("Reg" -> macRxFilterReg, "Addr" -> Bits("h07")) //0x1C
   )
+
+  val preambleReg = Reg(init = UInt(EthernetConstants.constSFD, width = 64))
+  val fcsReg = Reg(init = UInt(0, width = 16))
+
+  val miiStartTxReg = Reg(init = false.B)
+  val miiEndTxReg = Reg(init = false.B)
+  val miiByteData = Wire(init = UInt(0, width = 8))
+  val miiByteLoad = Wire(init = false.B)
+  val miiIsReady = Wire(init = false.B)
 
   /**
     * Fifo Management
     */
   fifoEmptyReg := fifoCountReg === 0.U
   fifoFullReg := fifoCountReg === numFrameBuffers.U
+
+  val ocpSelRam = ~ocpMasterReg.Addr(constRamAddrWidth) && ocpMasterReg.Cmd =/= OcpCmd.IDLE
+  val validRamPop = fifoPopReg === true.B && !fifoEmptyReg
+  val validRamPush = fifoPushReg === true.B && !fifoFullReg
+
+  //Reset regs to default values
+  miiStartTxReg := false.B
+  miiEndTxReg := false.B
+  fifoPushReg := false.B
+  fifoPopReg := false.B
+  //State Machine
+  switch(stateReg) {
+    is(stWait) { //wait for available data in FIFORam
+      when(!fifoEmptyReg) {
+        stateReg := stSoF
+      }
+    }
+    is(stSoF) { //wait until miiIsReady
+      when(miiIsReady) {
+        miiStartTxReg := true.B
+        stateReg := stTxPreamble
+      }
+    }
+    is(stTxPreamble) {
+      when(miiIsReady) { //wait until miiIsReady and then countup the PREAMBLE
+        when(byteCntReg < 8.U) {
+          byteCntReg := byteCntReg + 1.U
+        }.otherwise {
+          byteCntReg := 0.U
+          ethRamRdEn := true.B
+          stateReg := stTxFrame
+        }
+      }
+    }
+    is(stTxFrame) {
+      when(ramRespReg === OcpResp.DVA) {
+        when(miiIsReady) {
+          when(byteCntReg < txFrameSizeReg) {
+            byteCntReg := byteCntReg + 1.U
+          }.otherwise {
+            byteCntReg := 0.U
+            stateReg := stTxFrame
+          }
+        }
+      }
+    }
+    is(stTxFCS) {
+      when(miiIsReady) {
+        when(byteCntReg < 4.U) {
+          byteCntReg := byteCntReg + 1.U
+        }.otherwise {
+          byteCntReg := 0.U
+          ethRamRdEn := false.B
+          stateReg := stEoF
+        }
+      }
+    }
+    is(stEoF) {
+      miiByteData := 0.U
+      miiEndTxReg := true.B
+      stateReg := stIFG
+    }
+    is(stIFG) {
+      when(byteCntReg < 24.U) {
+        byteCntReg := byteCntReg + 1.U
+      }.otherwise {
+        byteCntReg := 0.U
+        stateReg := stWait
+        fifoPopReg := true.B
+      }
+    }
+  }
+
+  when(validRamPop) {
+    rdRamIdReg := rdRamIdReg + 1.U
+    fifoCountReg := fifoCountReg - 1.U
+  }
+
+  when(validRamPush) {
+    wrRamIdReg := wrRamIdReg + 1.U
+    fifoCountReg := fifoCountReg + 1.U
+  }
+
+  /**
+    * Multiplexing MII byte source
+    */
+  miiByteLoad := stateReg === stTxPreamble || stateReg === stTxFCS || (stateReg === stTxFrame && ramRespReg === OcpResp.DVA)
+  miiByteData := Mux(stateReg === stTxFCS, preambleReg(8.U + 8.U * byteCntReg - 1.U, 8.U * byteCntReg),
+    Mux(stateReg === stTxFCS, fcsReg(8.U + 8.U * byteCntReg - 1.U, 8.U * byteCntReg), ramDataReg))
+
+
+  /**
+    * Ram master-port Control
+    */
+  for (ramId <- 0 until numFrameBuffers) {
+    ramMasterRegs(ramId).Cmd := (Mux(ramId.U === wrRamIdReg && ocpSelRam, ocpMasterReg.Cmd, Mux(ethRamRdEn, OcpCmd.RD, OcpCmd.IDLE)))
+    ramMasterRegs(ramId).Addr := (Mux(ramId.U === wrRamIdReg && ocpSelRam, ocpMasterReg.Addr(constRamAddrWidth - 1, 2), byteCntReg(constRamAddrWidth - 1, 2)))
+    ramMasterRegs(ramId).ByteEn := (Mux(ramId.U === wrRamIdReg && ocpSelRam, ocpMasterReg.ByteEn, UIntToOH(byteCntReg(1, 0), width = 4)))
+    ramMasterRegs(ramId).Data := (ocpMasterReg.Data)
+  }
+
+  /**
+    * Ram slave-port Control
+    */
+  ramDataReg := io.ramPorts(rdRamIdReg).S.Data
+  ramRespReg := io.ramPorts(rdRamIdReg).S.Resp
+
+  /**
+    * Regs Master Control
+    */
+  ocpRespReg := OcpResp.NULL
+  when(ocpSelRam) {
+    ocpDataReg := io.ramPorts(wrRamIdReg).S.Data
+    ocpRespReg := Mux(!fifoFullReg, io.ramPorts(wrRamIdReg).S.Resp, OcpResp.FAIL)
+  }.otherwise {
+    when(ocpMasterReg.Cmd === OcpCmd.RD) {
+      ocpRespReg := OcpResp.DVA
+      when(ocpMasterReg.Addr(4, 2) === ethTxCtrlRegMap("txEn")("Addr")) {
+        ocpDataReg := ethTxCtrlRegMap("txEn")("Reg")
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethTxCtrlRegMap("frameSize")("Addr")) {
+        ocpDataReg := ethTxCtrlRegMap("frameSize")("Reg")
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethTxCtrlRegMap("fifoCount")("Addr")) {
+        ocpDataReg := ethTxCtrlRegMap("fifoCount")("Reg")
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethTxCtrlRegMap("fifoEmpty")("Addr")) {
+        ocpDataReg := ethTxCtrlRegMap("fifoEmpty")("Reg")
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethTxCtrlRegMap("fifoFull")("Addr")) {
+        ocpDataReg := ethTxCtrlRegMap("fifoFull")("Reg")
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethTxCtrlRegMap("fifoPop")("Addr")) {
+        ocpDataReg := ethTxCtrlRegMap("fifoPop")("Reg")
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethTxCtrlRegMap("fifoPush")("Addr")) {
+        ocpDataReg := ethTxCtrlRegMap("fifoPush")("Reg")
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethTxCtrlRegMap("macFilter")("Addr")) {
+        ocpDataReg := ethTxCtrlRegMap("macFilter")("Reg")
+      }
+    }.elsewhen(ocpMasterReg.Cmd === OcpCmd.WR) {
+      when(ocpMasterReg.Addr(4, 2) === ethTxCtrlRegMap("txEn")("Addr")) {
+        ethTxCtrlRegMap("txEn")("Reg") := orR(ocpMasterReg.Data)
+        ocpRespReg := OcpResp.DVA
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethTxCtrlRegMap("frameSize")("Addr")) {
+        ethTxCtrlRegMap("frameSize")("Reg") := ocpDataReg
+        ocpRespReg := OcpResp.DVA
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethTxCtrlRegMap("fifoCount")("Addr")) {
+        ocpRespReg := OcpResp.ERR
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethTxCtrlRegMap("fifoEmpty")("Addr")) {
+        ocpRespReg := OcpResp.ERR
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethTxCtrlRegMap("fifoFull")("Addr")) {
+        ocpRespReg := OcpResp.ERR
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethTxCtrlRegMap("fifoPop")("Addr")) {
+        ocpRespReg := OcpResp.ERR
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethTxCtrlRegMap("fifoPush")("Addr")) {
+        ethTxCtrlRegMap("fifoPush")("Reg") := orR(ocpMasterReg.Data) //set on write and reset in the next clock cycle
+        ocpRespReg := OcpResp.DVA //is the responsibility of the master to check first the count ?
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethTxCtrlRegMap("macFilter")("Addr")) {
+        ethTxCtrlRegMap("macFilter")("Reg") := ocpMasterReg.Data
+        ocpRespReg := OcpResp.DVA
+      }
+    }.otherwise {
+      ocpRespReg := OcpResp.NULL
+    }
+  }
+
+  /**
+    * IO Plumbing
+    */
+  io.ocp.S.Data := ocpDataReg
+  io.ocp.S.Resp := ocpRespReg
+  miiIsReady := miiTx.io.ready
+  miiTx.io.startTx := miiStartTxReg
+  miiTx.io.endTx := miiEndTxReg
+  miiTx.io.macDataDv := miiByteLoad
+  miiTx.io.macData := miiByteData
+  miiTx.io.miiChannel <> io.miiChannel
+  for (ramId <- 0 until numFrameBuffers) {
+    io.ramPorts(ramId).M := ramMasterRegs(ramId)
+  }
+}
+
+object EthTxController extends App {
+  chiselMain(Array[String]("--backend", "v", "--targetDir", "generated/" + this.getClass.getSimpleName.dropRight(1)),
+    () => Module(new EthTxController(2, 64)))
 }

@@ -11,11 +11,13 @@ package ocp
 
 import Chisel._
 
-class Arbiter(cnt: Int, addrWidth : Int, dataWidth : Int, burstLen : Int) extends Module {
+class Arbiter(cnt: Int, addrWidth: Int, dataWidth: Int, burstLen: Int) extends Module {
   // MS: I'm always confused from which direction the name shall be
   // probably the other way round...
   val io = IO(new Bundle {
-    val master = Vec.fill(cnt) { new OcpBurstSlavePort(addrWidth, dataWidth, burstLen) }
+    val master = Vec.fill(cnt) {
+      new OcpBurstSlavePort(addrWidth, dataWidth, burstLen)
+    }
     val slave = new OcpBurstMasterPort(addrWidth, dataWidth, burstLen)
   })
 
@@ -91,7 +93,7 @@ object ArbiterMain {
     val dataWidth = args(2)
     val burstLen = args(3)
 
-    chiselMain(chiselArgs, () => Module(new Arbiter(cnt.toInt,addrWidth.toInt,dataWidth.toInt,burstLen.toInt)))
+    chiselMain(chiselArgs, () => Module(new Arbiter(cnt.toInt, addrWidth.toInt, dataWidth.toInt, burstLen.toInt)))
   }
 }
 

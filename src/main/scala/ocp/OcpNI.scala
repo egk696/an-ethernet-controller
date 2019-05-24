@@ -10,7 +10,7 @@ package ocp
 import Chisel._
 
 // Cache masters provide address space signal
-class OcpNISlaveSignals(dataWidth : Int)
+class OcpNISlaveSignals(dataWidth: Int)
   extends OcpIOSlaveSignals(dataWidth) {
   val Reset_n = Bits(width = 1)
   val Flag = Bits(width = 2)
@@ -23,14 +23,14 @@ class OcpNISlaveSignals(dataWidth : Int)
 }
 
 // Master port
-class OcpNIMasterPort(addrWidth : Int, dataWidth : Int) extends Bundle() {
+class OcpNIMasterPort(addrWidth: Int, dataWidth: Int) extends Bundle() {
   // Clk is implicit in Chisel
   val M = new OcpIOMasterSignals(addrWidth, dataWidth).asOutput
   val S = new OcpNISlaveSignals(dataWidth).asInput
 }
 
 // Slave port is reverse of master port
-class OcpNISlavePort(addrWidth : Int, dataWidth : Int) extends Bundle() {
+class OcpNISlavePort(addrWidth: Int, dataWidth: Int) extends Bundle() {
   // Clk is implicit in Chisel
   val M = new OcpIOMasterSignals(addrWidth, dataWidth).asInput
   val S = new OcpNISlaveSignals(dataWidth).asOutput

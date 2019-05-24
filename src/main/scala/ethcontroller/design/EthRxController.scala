@@ -12,7 +12,7 @@ import ocp._
   * the RX MII channel and implements FIFO access to the connected buffers
   *
   * @param numFrameBuffers the numbers of buffers used
-  * @param timeStampWidth the timestamp bit-width
+  * @param timeStampWidth  the timestamp bit-width
   */
 class EthRxController(numFrameBuffers: Int, timeStampWidth: Int) extends Module {
   val io = new Bundle() {
@@ -20,7 +20,7 @@ class EthRxController(numFrameBuffers: Int, timeStampWidth: Int) extends Module 
     val ramPorts = Vec.fill(numFrameBuffers) {
       new OcpCoreMasterPort(32, 32)
     }
-    val miiChannel = new MIIChannel().asInput()
+    val miiChannel = new MIIChannel().asInput
     val rtcTimestamp = UInt(INPUT, width = timeStampWidth)
   }
 
@@ -29,13 +29,13 @@ class EthRxController(numFrameBuffers: Int, timeStampWidth: Int) extends Module 
     */
   val constRamIdWidth = log2Ceil(numFrameBuffers)
   val constRamAddrWidth = log2Ceil(EthernetConstants.constEthFrameLength)
-  val sWaitSFD :: stCollectPayload :: Nil = Enum(UInt(), 2)
+  val stWaitSFD :: stCollectPayload :: Nil = Enum(UInt(), 2)
   val miiRx = Module(new MIIRx())
 
   /**
     * Registers
     */
-  val stateReg = Reg(init = sWaitSFD)
+  val stateReg = Reg(init = stWaitSFD)
   val ethByteReg = RegEnable(miiRx.io.ethByte, miiRx.io.ethByteDv)
   val ethByteDvReg = Reg(next = miiRx.io.ethByteDv)
   val ocpMasterReg = Reg(next = io.ocp.M)
@@ -45,24 +45,27 @@ class EthRxController(numFrameBuffers: Int, timeStampWidth: Int) extends Module 
   val ramMasterRegs = Vec.fill(numFrameBuffers) {
     Reg(new OcpCoreMasterSignals(constRamAddrWidth, 32))
   }
-  val dataReg = Reg(init = Bits(0, width = 32))
-  val respReg = Reg(init = OcpResp.NULL)
-
-  val rxEnReg = Reg(init = Bool(true))
+  val ocpDataReg = Reg(init = Bits(0, width = 32))
+  val ocpRespReg = Reg(init = OcpResp.NULL)
+  val rxEnReg = Reg(init = true.B)
+  val rxFrameSizeReg = Reg(init = UInt(0, width = constRamAddrWidth)) //bytes
   val fifoCountReg = Reg(init = UInt(0, width = constRamIdWidth + 1))
-  val fifoEmptyReg = Reg(init = Bool(true))
-  val fifoFullReg = Reg(init = Bool(false))
-  val fifoPopReg = Reg(init = Bool(false))
+  val fifoEmptyReg = Reg(init = true.B)
+  val fifoFullReg = Reg(init = false.B)
+  val fifoPopReg = Reg(init = false.B)
+  val fifoPushReg = Reg(init = false.B)
   val macRxFilterReg = Reg(init = UInt(0, width = EthernetConstants.constEthMacLength))
-
   val ethRxCtrlRegMap = Map(
     "rxEn" -> Map("Reg" -> rxEnReg, "Addr" -> Bits("h00")),
-    "fifoCount" -> Map("Reg" -> fifoCountReg, "Addr" -> Bits("h01")),
-    "fifoEmpty" -> Map("Reg" -> fifoEmptyReg, "Addr" -> Bits("h02")),
-    "fifoFull" -> Map("Reg" -> fifoFullReg, "Addr" -> Bits("h03")),
-    "fifoPop" -> Map("Reg" -> fifoPopReg, "Addr" -> Bits("h04")),
-    "macRxFilter" -> Map("Reg" -> macRxFilterReg, "Addr" -> Bits("h05"))
+    "frameSize" -> Map("Reg" -> rxFrameSizeReg, "Addr" -> Bits("h01")),
+    "fifoCount" -> Map("Reg" -> fifoCountReg, "Addr" -> Bits("h02")),
+    "fifoEmpty" -> Map("Reg" -> fifoEmptyReg, "Addr" -> Bits("h03")),
+    "fifoFull" -> Map("Reg" -> fifoFullReg, "Addr" -> Bits("h04")),
+    "fifoPop" -> Map("Reg" -> fifoPopReg, "Addr" -> Bits("h05")),
+    "fifoPush" -> Map("Reg" -> fifoPushReg, "Addr" -> Bits("h06")),
+    "macFilter" -> Map("Reg" -> macRxFilterReg, "Addr" -> Bits("h07"))
   )
+
 
   /**
     * Fifo Management
@@ -76,23 +79,27 @@ class EthRxController(numFrameBuffers: Int, timeStampWidth: Int) extends Module 
   val ramWrSelOH = UIntToOH(wrRamIdReg)
   val ramRdSelOH = UIntToOH(rdRamIdReg)
 
-  val ocpSelRam = Mux(ocpMasterReg.Addr(constRamAddrWidth - 1) <= EthernetConstants.constEthFrameLength.U, true.B, false.B)
-  val validRamPop = Mux(ethRxCtrlRegMap("fifoPop")("Reg") === true.B && !fifoFullReg, true.B, false.B)
+  val ocpSelRam = ~ocpMasterReg.Addr(constRamAddrWidth) && ocpMasterReg.Cmd =/= OcpCmd.IDLE
+  val validRamPop = fifoPopReg && !fifoEmptyReg
+  val validRamPush = fifoPushReg && !fifoFullReg
 
-  val ethRamWrEn = Mux(ethByteDvReg && stateReg === stCollectPayload, true.B, false.B)
-  val ocpRamRdEn = Mux(ocpMasterReg.Cmd === OcpCmd.RD && ocpSelRam, true.B, false.B)
+  val ethRamWrEn = ethByteDvReg && stateReg === stCollectPayload
+  val ocpRamRdEn = ocpMasterReg.Cmd === OcpCmd.RD && ocpSelRam
 
+  fifoPushReg := false.B
+  fifoPopReg := false.B
   switch(stateReg) {
-    is(sWaitSFD) {
+    is(stWaitSFD) {
       when(miiRx.io.ethSof && !fifoFullReg) {
         stateReg := stCollectPayload
       }
     }
     is(stCollectPayload) {
       when(miiRx.io.ethEof) {
-        stateReg := sWaitSFD
-        wrRamIdReg := wrRamIdReg + 1.U
-        fifoCountReg := fifoCountReg + 1.U
+        stateReg := stWaitSFD
+        rxFrameSizeReg := byteCntReg
+        byteCntReg := 0.U
+        fifoPushReg := true.B
       }
     }
   }
@@ -101,72 +108,85 @@ class EthRxController(numFrameBuffers: Int, timeStampWidth: Int) extends Module 
     byteCntReg := byteCntReg + 1.U
   }
 
+
   when(validRamPop) {
     rdRamIdReg := rdRamIdReg + 1.U
     fifoCountReg := fifoCountReg - 1.U
   }
 
-  /**
-    * Regs Master Control
-    */
-  ethRxCtrlRegMap("fifoPop")("Reg") := false.B
-  respReg := OcpResp.NULL
-  when(ocpSelRam) {
-    dataReg := io.ramPorts(rdRamIdReg).S.Data
-    respReg := Mux(!fifoFullReg, io.ramPorts(rdRamIdReg).S.Resp, OcpResp.FAIL)
-  }.otherwise {
-    when(ocpMasterReg.Cmd === OcpCmd.RD) {
-      respReg := OcpResp.DVA
-      when(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("rxEn")("Addr")) {
-        dataReg := ethRxCtrlRegMap("rxEn")("Reg")
-      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("fifoCount")("Addr")) {
-        dataReg := ethRxCtrlRegMap("fifoCount")("Reg")
-      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("fifoEmpty")("Addr")) {
-        dataReg := ethRxCtrlRegMap("fifoEmpty")("Reg")
-      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("fifoFull")("Addr")) {
-        dataReg := ethRxCtrlRegMap("fifoFull")("Reg")
-      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("fifoPop")("Addr")) {
-        dataReg := ethRxCtrlRegMap("fifoPop")("Reg")
-      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("macRxFilter")("Addr")) {
-        dataReg := ethRxCtrlRegMap("macRxFilter")("Reg")
-      }
-    }.elsewhen(ocpMasterReg.Cmd === OcpCmd.WR) {
-      when(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("rxEn")("Addr")) {
-        ethRxCtrlRegMap("rxEn")("Reg") := orR(ocpMasterReg.Data)
-        respReg := OcpResp.DVA
-      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("fifoCount")("Addr")) {
-        respReg := OcpResp.ERR
-      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("fifoEmpty")("Addr")) {
-        respReg := OcpResp.ERR
-      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("fifoFull")("Addr")) {
-        respReg := OcpResp.ERR
-      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("fifoPop")("Addr")) {
-        ethRxCtrlRegMap("fifoPop")("Reg") := true.B //as long as you write something it is set to one which is automatically reset in the next clock cycle
-        respReg := OcpResp.DVA
-      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("macRxFilter")("Addr")) {
-        ethRxCtrlRegMap("macRxFilter")("Reg") := ocpMasterReg.Data
-        respReg := OcpResp.DVA
-      }
-    }.otherwise {
-      respReg := OcpResp.NULL
-    }
+  when(validRamPush) {
+    wrRamIdReg := wrRamIdReg + 1.U
+    fifoCountReg := fifoCountReg + 1.U
   }
 
   /**
     * Ram Master Control
     */
   for (ramId <- 0 until numFrameBuffers) {
-    ramMasterRegs(ramId).Addr := RegNext(Mux(ramWrSelOH(ramId) && ethRamWrEn, byteCntReg(constRamAddrWidth - 1, 2), ocpMasterReg.Addr(constRamAddrWidth - 1, 2)))
-    ramMasterRegs(ramId).ByteEn := RegNext(Mux(ramWrSelOH(ramId) && ethRamWrEn, UIntToOH(byteCntReg(1, 0), width = 4), Mux(ocpRamRdEn, ocpMasterReg.ByteEn, Bits("b0000"))))
-    ramMasterRegs(ramId).Cmd := RegNext(Mux(ramWrSelOH(ramId) && ethRamWrEn, OcpCmd.WR, Mux(ocpRamRdEn, OcpCmd.RD, OcpCmd.IDLE)))
+    ramMasterRegs(ramId).Addr := RegNext(Mux(ramId.U === wrRamIdReg && ocpSelRam, byteCntReg(constRamAddrWidth - 1, 2), ocpMasterReg.Addr(constRamAddrWidth - 1, 2)))
+    ramMasterRegs(ramId).ByteEn := RegNext(Mux(ramId.U === wrRamIdReg && ocpSelRam, UIntToOH(byteCntReg(1, 0), width = 4), Mux(ocpRamRdEn, ocpMasterReg.ByteEn, Bits("b0000"))))
+    ramMasterRegs(ramId).Cmd := RegNext(Mux(ramId.U === wrRamIdReg && ocpSelRam, OcpCmd.WR, Mux(ocpRamRdEn, OcpCmd.RD, OcpCmd.IDLE)))
     ramMasterRegs(ramId).Data := RegNext(ethByteReg)
+  }
+
+  /**
+    * Regs Master Control
+    */
+  ocpRespReg := OcpResp.NULL
+  when(ocpSelRam) {
+    ocpDataReg := io.ramPorts(rdRamIdReg).S.Data
+    ocpRespReg := Mux(!fifoFullReg, io.ramPorts(rdRamIdReg).S.Resp, OcpResp.FAIL)
+  }.otherwise {
+    when(ocpMasterReg.Cmd === OcpCmd.RD) {
+      ocpRespReg := OcpResp.DVA
+      when(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("rxEn")("Addr")) {
+        ocpDataReg := ethRxCtrlRegMap("rxEn")("Reg")
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("frameSize")("Addr")) {
+        ocpDataReg := ethRxCtrlRegMap("frameSize")("Reg")
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("fifoCount")("Addr")) {
+        ocpDataReg := ethRxCtrlRegMap("fifoCount")("Reg")
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("fifoEmpty")("Addr")) {
+        ocpDataReg := ethRxCtrlRegMap("fifoEmpty")("Reg")
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("fifoFull")("Addr")) {
+        ocpDataReg := ethRxCtrlRegMap("fifoFull")("Reg")
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("fifoPop")("Addr")) {
+        ocpDataReg := ethRxCtrlRegMap("fifoPop")("Reg")
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("fifoPush")("Addr")) {
+        ocpDataReg := ethRxCtrlRegMap("fifoPush")("Reg")
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("macFilter")("Addr")) {
+        ocpDataReg := ethRxCtrlRegMap("macFilter")("Reg")
+      }
+    }.elsewhen(ocpMasterReg.Cmd === OcpCmd.WR) {
+      when(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("rxEn")("Addr")) {
+        ethRxCtrlRegMap("rxEn")("Reg") := ocpMasterReg.Data.orR
+        ocpRespReg := OcpResp.DVA
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("frameSize")("Addr")) {
+        ocpRespReg := OcpResp.ERR
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("fifoCount")("Addr")) {
+        ocpRespReg := OcpResp.ERR
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("fifoEmpty")("Addr")) {
+        ocpRespReg := OcpResp.ERR
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("fifoFull")("Addr")) {
+        ocpRespReg := OcpResp.ERR
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("fifoPop")("Addr")) {
+        ethRxCtrlRegMap("fifoPop")("Reg") := true.B //set on write and reset in the next clock cycle
+        ocpRespReg := OcpResp.DVA //is the responsibility of the master to check first the count ?
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("fifoPush")("Addr")) {
+        ocpRespReg := OcpResp.ERR
+      }.elsewhen(ocpMasterReg.Addr(4, 2) === ethRxCtrlRegMap("macFilter")("Addr")) {
+        ethRxCtrlRegMap("macFilter")("Reg") := ocpMasterReg.Data
+        ocpRespReg := OcpResp.DVA
+      }
+    }.otherwise {
+      ocpRespReg := OcpResp.NULL
+    }
   }
 
   /**
     * I/O plumbing
     */
-  io.ocp.S.Data := dataReg
-  io.ocp.S.Resp := respReg
+  io.ocp.S.Data := ocpDataReg
+  io.ocp.S.Resp := ocpRespReg
   miiRx.io.miiChannel <> io.miiChannel
   miiRx.io.rxEn := ethRxCtrlRegMap("rxEn")("Reg")
   for (ramId <- 0 until numFrameBuffers) {

@@ -12,7 +12,7 @@ import ethcontroller.utils.{Deserializer, ExtClockSampler}
   */
 class MIIRx extends Module {
   val io = new Bundle() {
-    val miiChannel = new MIIChannel().asInput()
+    val miiChannel = new MIIChannel().asInput
     val rxEn = Bool(INPUT)
     val phyErr = Bool(OUTPUT)
     val ethSof = Bool(OUTPUT)

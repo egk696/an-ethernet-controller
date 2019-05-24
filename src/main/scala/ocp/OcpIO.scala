@@ -11,7 +11,7 @@ import Chisel._
 
 // Masters include a RespAccept signal
 class OcpIOMasterSignals(addrWidth: Int, dataWidth: Int)
-    extends OcpCoreMasterSignals(addrWidth, dataWidth) {
+  extends OcpCoreMasterSignals(addrWidth, dataWidth) {
   val RespAccept = Bits(width = 1)
 
   // This does not really clone, but Data.clone doesn't either
@@ -23,7 +23,7 @@ class OcpIOMasterSignals(addrWidth: Int, dataWidth: Int)
 
 // Slaves include a CmdAccept signal
 class OcpIOSlaveSignals(dataWidth: Int)
-    extends OcpSlaveSignals(dataWidth) {
+  extends OcpSlaveSignals(dataWidth) {
   val CmdAccept = Bits(width = 1)
 
   // This does not really clone, but Data.clone doesn't either
@@ -68,7 +68,7 @@ class OcpIOBridge(master: OcpCoreMasterPort, slave: OcpIOSlavePort) {
 //   including the earlier reaction on CmdAccep
 //   adds than combinational paths
 class OcpIOBridgeAlt(master: OcpCoreMasterPort, slave: OcpIOSlavePort) {
-  
+
   val masterReg = Reg(init = master.M) // What is the reset value of this bundle?
   val busyReg = Reg(init = Bool(false))
 
@@ -90,6 +90,7 @@ class OcpIOBridgeAlt(master: OcpCoreMasterPort, slave: OcpIOSlavePort) {
   // Forward slave signals to master
   master.S <> slave.S
 }
+
 // Provide a "bus" with a master port and a slave port to simplify plumbing
 class OcpIOBus(addrWidth: Int, dataWidth: Int) extends Module {
   val io = new Bundle {

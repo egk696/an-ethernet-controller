@@ -10,9 +10,9 @@ package ocp
 import Chisel._
 
 // Masters include a byte-enable signal
-class OcpCoreMasterSignals(addrWidth : Int, dataWidth : Int)
+class OcpCoreMasterSignals(addrWidth: Int, dataWidth: Int)
   extends OcpMasterSignals(addrWidth, dataWidth) {
-  val ByteEn = Bits(width = dataWidth/8)
+  val ByteEn = Bits(width = dataWidth / 8)
 
   // This does not really clone, but Data.clone doesn't either
   override def clone() = {
@@ -22,7 +22,7 @@ class OcpCoreMasterSignals(addrWidth : Int, dataWidth : Int)
 }
 
 // Master port
-class OcpCoreMasterPort(addrWidth : Int, dataWidth : Int) extends Bundle() {
+class OcpCoreMasterPort(addrWidth: Int, dataWidth: Int) extends Bundle() {
   val M = new OcpCoreMasterSignals(addrWidth, dataWidth).asOutput
   val S = new OcpSlaveSignals(dataWidth).asInput
 
@@ -34,7 +34,7 @@ class OcpCoreMasterPort(addrWidth : Int, dataWidth : Int) extends Bundle() {
 }
 
 // Slave port is reverse of master port
-class OcpCoreSlavePort(addrWidth : Int, dataWidth : Int) extends Bundle() {
+class OcpCoreSlavePort(addrWidth: Int, dataWidth: Int) extends Bundle() {
   val M = new OcpCoreMasterSignals(addrWidth, dataWidth).asInput
   val S = new OcpSlaveSignals(dataWidth).asOutput
 
@@ -47,7 +47,7 @@ class OcpCoreSlavePort(addrWidth : Int, dataWidth : Int) extends Bundle() {
 }
 
 // Provide a "bus" with a master port and a slave port to simplify plumbing
-class OcpCoreBus(addrWidth : Int, dataWidth : Int) extends Module {
+class OcpCoreBus(addrWidth: Int, dataWidth: Int) extends Module {
   val io = new Bundle {
     val slave = new OcpCoreSlavePort(addrWidth, dataWidth)
     val master = new OcpCoreMasterPort(addrWidth, dataWidth)

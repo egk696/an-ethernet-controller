@@ -5,6 +5,7 @@ package ethcontroller.design
 import Chisel.{Module, Tester, chiselMainTest}
 import ethcontroller.protocols.{EthernetFrame, EthernetTesting}
 
+import scala.language.postfixOps
 import scala.sys.process._
 
 class MIITxTester(dut: MIITx, frame: EthernetFrame) extends Tester(dut) {

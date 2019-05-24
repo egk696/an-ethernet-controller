@@ -10,7 +10,7 @@ class MIIChannel extends Bundle {
   /** Received data valid */
   val dv = Bool(OUTPUT)
   /** Received nibble data */
-  val data = Bits(OUTPUT,width = 4)
+  val data = Bits(OUTPUT, width = 4)
   /** Signal could not be decoded to data */
   val err = Bool(INPUT)
   /** Carrier-sense signal */

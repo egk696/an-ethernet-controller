@@ -5,6 +5,7 @@ package ethcontroller.utils
 import Chisel._
 import ethcontroller.protocols.{EthernetFrame, EthernetTesting}
 
+import scala.language.postfixOps
 import scala.sys.process._
 
 class SerializerTester(dut: Serializer, frame: EthernetFrame) extends Tester(dut) {

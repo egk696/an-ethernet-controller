@@ -9,7 +9,7 @@ import Chisel._
   * requested external clock edge
   *
   * @param sampleRisingEdge if true it samples the rising edge, else the falling edge
-  * @param syncChainDepth the number of FF synchronizers to use
+  * @param syncChainDepth   the number of FF synchronizers to use
   */
 class ExtClockSampler(sampleRisingEdge: Boolean = true, syncChainDepth: Int = 2) extends Module {
   val io = new Bundle() {
@@ -22,7 +22,7 @@ class ExtClockSampler(sampleRisingEdge: Boolean = true, syncChainDepth: Int = 2)
   val extClkSyncedReg = ShiftRegister(io.extClk, syncChainDepth)
   val extClkSyncedOldReg = Reg(next = extClkSyncedReg)
 
-  if(sampleRisingEdge) {
+  if (sampleRisingEdge) {
     extClkEdge := extClkSyncedReg & ~extClkSyncedOldReg //check for a rising edge
   } else {
     extClkEdge := ~extClkSyncedReg & extClkSyncedOldReg //or check for a falling edge
