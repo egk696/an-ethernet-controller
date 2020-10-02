@@ -11,10 +11,10 @@ import scala.sys.process._
 class MIITxTester(dut: MIITx, frame: EthernetFrame) extends Tester(dut) {
   // Shifting of discrete numbers for clarity
   var byteAddr = 0
-  poke(dut.io.startTx, true)
+  //  poke(dut.io.startTx, true)
   poke(dut.io.miiChannel.clk, 0)
   step(3)
-  poke(dut.io.startTx, false)
+  //  poke(dut.io.startTx, false)
   println("-- Testing the preamble")
   while(byteAddr < frame.preamble.length){
     if(peek(dut.io.ready) == 1){
@@ -37,10 +37,10 @@ class MIITxTester(dut: MIITx, frame: EthernetFrame) extends Tester(dut) {
     poke(dut.io.miiChannel.clk, 1)
     step(3)
   }
-  poke(dut.io.endTx, true)
+  //  poke(dut.io.endTx, true)
   poke(dut.io.miiChannel.clk, 0)
   step(1)
-  poke(dut.io.endTx, true)
+  //  poke(dut.io.endTx, true)
   step(2)
   poke(dut.io.miiChannel.clk, 1)
   step(3)

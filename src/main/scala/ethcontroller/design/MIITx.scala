@@ -10,8 +10,6 @@ import ethcontroller.utils.{ExtClockSampler, Serializer}
 class MIITx extends Module {
   val io = new Bundle() {
     val miiChannel = new MIIChannel()
-    val startTx = Bool(INPUT)
-    val endTx = Bool(INPUT)
     val macDataDv = Bool(INPUT)
     val macData = Bits(INPUT, width = 8)
     val ready = Bool(OUTPUT)
@@ -49,7 +47,7 @@ class MIITx extends Module {
 
   when(~transmittingReg && serializeByteToNibble.io.dv) {
     transmittingReg := true.B
-  }.elsewhen(io.endTx && serializeByteToNibble.io.done) {
+  }.elsewhen(~serializeByteToNibble.io.dv && serializeByteToNibble.io.done) {
     transmittingReg := false.B
   }
 

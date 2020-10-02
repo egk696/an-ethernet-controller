@@ -17,6 +17,9 @@ abstract class EthernetFrame {
   val dstMac: Array[Byte]
   val srcMac: Array[Byte]
   val ethType: Array[Byte]
+  val data: Array[Byte]
+
+  //Special cases
   val ipHeader: Array[Byte]
   val udpHeader: Array[Byte]
   val ptpHeader: Array[Byte]
@@ -33,6 +36,8 @@ abstract class EthernetFrame {
   def srcMacNibbles: Array[Int] = EthernetUtils.dataBytesToNibbles(srcMac, msbFirst = false)
 
   def ethTypeNibbles: Array[Int] = EthernetUtils.dataBytesToNibbles(ethType, msbFirst = false)
+
+  def dataNibbles: Array[Int] = EthernetUtils.dataBytesToNibbles(data, msbFirst = false)
 
   def ipHeaderNibbles: Array[Int] = EthernetUtils.dataBytesToNibbles(ipHeader, msbFirst = false)
 

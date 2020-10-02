@@ -4,8 +4,7 @@ package ethcontroller.protocols
 
 object EthernetTesting {
 
-  val mockupPTPEthFrameDHCP = new EthernetFrame {
-    override val preamble: Array[Byte] = EthernetUtils.toBytes(0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0xD5)
+  val mockupPTPEthFrameDHCP = new DefaultEthFrame {
     override val dstMac: Array[Byte] = EthernetUtils.toBytes(0xff, 0xff, 0xff, 0xff, 0xff, 0xff)
     override val srcMac: Array[Byte] = EthernetUtils.toBytes(0x80, 0xce, 0x62, 0xd8, 0xc7, 0x39)
     override val ethType: Array[Byte] = EthernetUtils.toBytes(0x08, 0x00)
@@ -23,10 +22,9 @@ object EthernetTesting {
     override val ptpSuffix: Array[Byte] = EthernetUtils.toBytes(0x00)
     override val fcs: Array[Byte] = EthernetUtils.toBytes(0x00)
     override val igp: Array[Byte] = EthernetUtils.toBytes(0x00)
+    override val data: Array[Byte] = ipHeader ++ udpHeader ++ ptpHeader ++ ptpBody ++ ptpSuffix ++ fcs ++ igp
   }
-
-  val mockupPTPVLANFrameOverIpUDP = new EthernetFrame {
-    override val preamble: Array[Byte] = EthernetUtils.toBytes(0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0xD5)
+  val mockupPTPVLANFrameOverIpUDP = new DefaultEthFrame {
     override val dstMac: Array[Byte] = EthernetUtils.toBytes(0x01, 0x00, 0x5E, 0x00, 0x01, 0x81)
     override val srcMac: Array[Byte] = EthernetUtils.toBytes(0x01, 0x00, 0x5E, 0x00, 0x01, 0x81)
     override val ethType: Array[Byte] = EthernetUtils.toBytes(0x81, 0x00, 0x01, 0x11, 0x08, 0x00)
@@ -43,10 +41,9 @@ object EthernetTesting {
     override val ptpSuffix: Array[Byte] = EthernetUtils.toBytes(0x00)
     override val fcs: Array[Byte] = EthernetUtils.toBytes(0x00)
     override val igp: Array[Byte] = EthernetUtils.toBytes(0x00)
+    override val data: Array[Byte] = ipHeader ++ udpHeader ++ ptpHeader ++ ptpBody ++ ptpSuffix ++ fcs ++ igp
   }
-
-  val mockupPTPEthFrameOverIpUDP = new EthernetFrame {
-    override val preamble: Array[Byte] = EthernetUtils.toBytes(0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0xD5)
+  val mockupPTPEthFrameOverIpUDP = new DefaultEthFrame {
     override val dstMac: Array[Byte] = EthernetUtils.toBytes(0x01, 0x00, 0x5E, 0x00, 0x01, 0x81)
     override val srcMac: Array[Byte] = EthernetUtils.toBytes(0x01, 0x00, 0x5E, 0x00, 0x01, 0x81)
     override val ethType: Array[Byte] = EthernetUtils.toBytes(0x08, 0x00)
@@ -63,6 +60,29 @@ object EthernetTesting {
     override val ptpSuffix: Array[Byte] = EthernetUtils.toBytes(0x00)
     override val fcs: Array[Byte] = EthernetUtils.toBytes(0x00)
     override val igp: Array[Byte] = EthernetUtils.toBytes(0x00)
+    override val data: Array[Byte] = ipHeader ++ udpHeader ++ ptpHeader ++ ptpBody ++ ptpSuffix ++ fcs ++ igp
+  }
+  val mockupTTEPCFFrame = new DefaultEthFrame {
+    override val dstMac: Array[Byte] = EthernetUtils.toBytes(0xAB, 0xAD, 0xBA, 0xBE, 0x0F, 0xCE)
+    override val srcMac: Array[Byte] = EthernetUtils.toBytes(0x00, 0x11, 0x22, 0x33, 0x44, 0x55)
+    override val ethType: Array[Byte] = EthernetUtils.toBytes(0x89, 0x1D)
+    override val data: Array[Byte] = EthernetUtils.toBytes(0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x02, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1b, 0xc0, 0x00, 0x00)
+  }
+
+  class DefaultEthFrame extends EthernetFrame {
+    override val preamble: Array[Byte] = EthernetUtils.toBytes(0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0xD5)
+    override val dstMac: Array[Byte] = Array.emptyByteArray
+    override val srcMac: Array[Byte] = Array.emptyByteArray
+    override val ethType: Array[Byte] = Array.emptyByteArray
+    override val ipHeader: Array[Byte] = Array.emptyByteArray
+    override val udpHeader: Array[Byte] = Array.emptyByteArray
+    override val ptpHeader: Array[Byte] = Array.emptyByteArray
+    override val ptpBody: Array[Byte] = Array.emptyByteArray
+    override val ptpSuffix: Array[Byte] = Array.emptyByteArray
+    override val fcs: Array[Byte] = Array.emptyByteArray
+    override val igp: Array[Byte] = Array.emptyByteArray
+    override val data: Array[Byte] = Array.emptyByteArray
   }
 
 }

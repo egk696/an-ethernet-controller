@@ -7,27 +7,61 @@ import ethcontroller.protocols.{EthernetFrame, EthernetTesting}
 import ocp.OcpCmd
 
 import scala.language.postfixOps
+import scala.sys.process._
 
 
 class EthTxControllerTester(dut: EthTxController, frame: EthernetFrame, injectNoFrames: Int) extends Tester(dut) {
 
-  def initPHY2MII(clockDiv: Int): Unit = {
+  val MII_TICKS_TO_CLKS: Int = 2
+
+  var miiClkValue: Int = 0
+  var numberOfSysSteps: Int = 0
+
+  def testSingleFrameTransmission(frame: EthernetFrame, initTime: Long): Unit = {
+    initPHY2MII(4)
+    println("Testing OCP write to buffer")
+    ocpLoadFrameToBuffer()
+    println("Testing EthTx transmission")
+    println("Testing preamble")
+    //    for (nibble <- frame.preambleNibbles) {
+    //      stepWithMIIClock(6)
+    //      peek(dut.miiTx.serializeByteToNibble.doneReg)
+    //      peek(dut.miiTx.serializeByteToNibble.shiftReg)
+    //      peekEthTxStatus()
+    //    }
+    //    println("Testing MAC")
+    //    for (nibble <- frame.dstMacNibbles ++ frame.srcMacNibbles ++ frame.ethTypeNibbles) {
+    //      stepWithMIIClock(6)
+    //      peekEthTxStatus()
+    //    }
+    //    println("Testing Raw Ethernet frame II payload")
+    //    for (payloadData <- 0 until 45) {
+    //      for (nibble <- frame.dataNibbles) {
+    //        stepWithMIIClock(6)
+    //        peekEthTxStatus()
+    //      }
+    //    }
+    println("Testing EoF")
+    stepWithMIIClock()
+  }
+
+  def initPHY2MII(steps: Int): Unit = {
     poke(dut.io.miiChannel.col, 0)
     poke(dut.io.miiChannel.crs, 0)
     poke(dut.io.miiChannel.clk, 0)
-    step(clockDiv)
+    step(steps)
   }
 
-  def ocpLoadFrameToBuffer(clockDiv: Int): Unit = {
-    val totalFrame = frame.dstMac ++ frame.srcMac ++ frame.ethType
+  def ocpLoadFrameToBuffer(): Unit = {
+    val totalFrame = frame.dstMac ++ frame.srcMac ++ frame.ethType ++ frame.data
     var ocpAddr = 0x0
     var byteCnt = 0x1
-    for (byte <- frame.dstMac ++ frame.srcMac ++ frame.ethType) {
+    for (byte <- totalFrame) {
       poke(dut.io.ocp.M.Addr, ocpAddr)
       poke(dut.io.ocp.M.ByteEn, byteCnt)
       poke(dut.io.ocp.M.Data, byte)
       poke(dut.io.ocp.M.Cmd, OcpCmd.WR.litValue())
-      step(clockDiv)
+      stepWithMIIClock()
       if (byteCnt == 8) {
         byteCnt = 1
         ocpAddr += 0x1
@@ -35,22 +69,17 @@ class EthTxControllerTester(dut: EthTxController, frame: EthernetFrame, injectNo
         byteCnt = byteCnt << 1
       }
     }
+
     poke(dut.io.ocp.M.Cmd, OcpCmd.IDLE.litValue())
-    step(clockDiv)
-    poke(dut.io.ocp.M.Addr, 0x4018)
+    stepWithMIIClock()
+    poke(dut.io.ocp.M.Addr, 1 << dut.constRamAddrWidth | 0x18)
     poke(dut.io.ocp.M.ByteEn, 0xF)
     poke(dut.io.ocp.M.Data, 0x1)
     poke(dut.io.ocp.M.Cmd, OcpCmd.WR.litValue())
-    step(clockDiv)
+    stepWithMIIClock()
     poke(dut.io.ocp.M.Cmd, OcpCmd.IDLE.litValue())
-    step(clockDiv)
-  }
-
-  def stepMIIClock(clockDiv: Int): Unit = {
-    poke(dut.io.miiChannel.clk, 0)
-    step(clockDiv)
-    poke(dut.io.miiChannel.clk, 1)
-    step(clockDiv)
+    stepWithMIIClock()
+    expect(dut.fifoPushReg, true)
   }
 
   def peekEthTxStatus(): Unit = {
@@ -65,32 +94,15 @@ class EthTxControllerTester(dut: EthTxController, frame: EthernetFrame, injectNo
     peek(dut.miiTx.transmittingReg)
   }
 
-  def testSingleFrameTransmission(frame: EthernetFrame, initTime: Long): Unit = {
-    initPHY2MII(4)
-    println("Testing OCP write to buffer")
-    ocpLoadFrameToBuffer(1)
-    //    println("Testing preamble")
-    //    for (nibble <- frame.preambleNibbles) {
-    //      stepMIIClock(6)
-    //      peek(dut.miiTx.serializeByteToNibble.doneReg)
-    //      peek(dut.miiTx.serializeByteToNibble.shiftReg)
-    //      peekEthTxStatus()
-    //    }
-    //    println("Testing MAC")
-    //    for (nibble <- frame.dstMacNibbles ++ frame.srcMacNibbles ++ frame.ethTypeNibbles) {
-    //      stepMIIClock(6)
-    //      peekEthTxStatus()
-    //    }
-    //    println("Testing Raw Ethernet frame II payload")
-    //    for (payloadData <- 0 until 45) {
-    //      for (nibble <- EthernetUtils.byteToNibble(payloadData, true)) {
-    //        stepMIIClock(6)
-    //        peekEthTxStatus()
-    //      }
-    //    }
-    //    println("Testing EoF")
-    stepMIIClock(6)
-    peekEthTxStatus()
+  def stepWithMIIClock(): Unit = {
+    poke(dut.io.miiChannel.clk, miiClkValue)
+    step(1)
+    if (numberOfSysSteps > MII_TICKS_TO_CLKS) {
+      miiClkValue = 1 - miiClkValue
+      numberOfSysSteps = 0
+    } else {
+      numberOfSysSteps += 1
+    }
   }
 
   /**
@@ -103,8 +115,8 @@ class EthTxControllerTester(dut: EthTxController, frame: EthernetFrame, injectNo
     println("TEST FRAME ITERATION #" + i + " at t = " + time.toHexString)
     testSingleFrameTransmission(frame, time)
     println("END TEST FRAME ITERATION #" + i + " at t = " + time.toHexString)
-    step(1)
-    step(1)
+    stepWithMIIClock()
+    stepWithMIIClock()
     println("...")
     println("...")
   }
@@ -118,10 +130,12 @@ object EthTxControllerTester extends App {
   chiselMainTest(Array("--genHarness", "--test", "--backend", "c",
     "--compile", "--vcd", "--targetDir", pathToVCD),
     () => Module(new EthTxController(4, 64))) {
-    dut => new EthTxControllerTester(dut, EthernetTesting.mockupPTPEthFrameOverIpUDP, 5)
+    dut => new EthTxControllerTester(dut, EthernetTesting.mockupTTEPCFFrame, 5)
   }
 
-  //  "gtkwave " + pathToVCD + "/" + nameOfVCD + " " + pathToVCD + "/" + "view.sav" !
+  var waveHandle = "gtkwave " + pathToVCD + "/" + nameOfVCD + " " + pathToVCD + "/" + "view.sav" !
+
+  println("gtkwave running as PID:" + waveHandle)
 }
 
 
