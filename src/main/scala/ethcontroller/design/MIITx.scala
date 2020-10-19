@@ -33,7 +33,7 @@ class MIITx extends Module {
   /**
     * Flags
     */
-  val phyNA = io.miiChannel.col & ~io.miiChannel.crs
+  val phyNA = io.miiChannel.col && !io.miiChannel.crs
   val phyError = phyNA || miiErrSyncedReg
   val miiClkEdge = miiClkSampler.io.sampledClk
 
@@ -45,9 +45,9 @@ class MIITx extends Module {
   serializeByteToNibble.io.shiftIn := io.macData
   serializeByteToNibble.io.en := miiClkEdge
 
-  when(~transmittingReg && serializeByteToNibble.io.dv) {
+  when(!transmittingReg && serializeByteToNibble.io.dv) {
     transmittingReg := true.B
-  }.elsewhen(~serializeByteToNibble.io.dv && serializeByteToNibble.io.done) {
+  }.elsewhen(!serializeByteToNibble.io.dv && serializeByteToNibble.io.done) {
     transmittingReg := false.B
   }
 
@@ -58,7 +58,7 @@ class MIITx extends Module {
     //(De-)Assert MII data valid
     when(transmittingReg) {
       miiDvReg := true.B
-    }.elsewhen(~transmittingReg) {
+    }.elsewhen(!transmittingReg) {
       miiDvReg := false.B
     }
     //Data nibble
@@ -68,7 +68,7 @@ class MIITx extends Module {
   /**
     * I/O plumbing
     */
-  io.ready := ~transmittingReg || ~serializeByteToNibble.io.dv
+  io.ready := !transmittingReg || !serializeByteToNibble.io.dv
   io.miiChannel.data := miiDataReg
   io.miiChannel.dv := miiDvReg
   io.phyErr := phyNA

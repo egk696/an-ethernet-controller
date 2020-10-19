@@ -40,9 +40,9 @@ class MIIRx extends Module {
   /**
     * Flags
     */
-  val phyNA = io.miiChannel.col & ~io.miiChannel.crs
+  val phyNA = io.miiChannel.col &&  !io.miiChannel.crs
   val phyError = phyNA || miiErrSyncedReg
-  val validPHYData = miiDvSyncedReg & ~miiErrSyncedReg & ~phyNA
+  val validPHYData = miiDvSyncedReg && !miiErrSyncedReg && !phyNA
   validPHYDataReg := validPHYData
   val risingMIIEdge = miiClkSampler.io.sampledClk
 
@@ -75,7 +75,7 @@ class MIIRx extends Module {
   }
 
   eofReg := false.B
-  when(validPHYDataReg && ~validPHYData) {
+  when(validPHYDataReg && !validPHYData) {
     eofReg := true.B
   }
 

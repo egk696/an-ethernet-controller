@@ -15,14 +15,14 @@ import ocp._
   * @param timeStampWidth  the timestamp bit-width
   */
 class EthRxController(numFrameBuffers: Int, timeStampWidth: Int) extends Module {
-  val io = new Bundle() {
+
+
+  val io = IO(new Bundle() {
     val ocp = new OcpCoreSlavePort(32, 32)
-    val ramPorts = Vec.fill(numFrameBuffers) {
-      new OcpCoreMasterPort(32, 32)
-    }
+    val ramPorts = Vec(numFrameBuffers, new OcpCoreMasterPort(32, 32))
     val miiChannel = new MIIChannel().asInput
     val rtcTimestamp = UInt(INPUT, width = timeStampWidth)
-  }
+  })
 
   /**
     * Constants and types defs
@@ -194,7 +194,7 @@ class EthRxController(numFrameBuffers: Int, timeStampWidth: Int) extends Module 
   }
 }
 
+
 object EthRxController extends App {
-  chiselMain(Array[String]("--backend", "v", "--targetDir", "generated/" + this.getClass.getSimpleName.dropRight(1)),
-    () => Module(new EthRxController(2, 64)))
+  chisel3.Driver.execute(Array("--target-dir", "generated"), () => new EthRxController(2, 64))
 }

@@ -4,6 +4,7 @@ package ethcontroller.utils
 
 import Chisel._
 
+
 /**
   * Serializes an M-bit input to an N-bit output based on a specified order
   * after an initial load
@@ -13,6 +14,8 @@ import Chisel._
   * @param msbFirst    the serial output order
   */
 class Serializer(msbFirst: Boolean = false, inputWidth: Int = 8, outputWidth: Int = 4) extends Module {
+
+
   val io = new Bundle() {
     val load = Bool(INPUT)
     val en = Bool(INPUT)
@@ -23,16 +26,21 @@ class Serializer(msbFirst: Boolean = false, inputWidth: Int = 8, outputWidth: In
   }
 
   val constShiftStages = inputWidth / outputWidth
-  val shiftReg = Reg(init = Bits(0, width = inputWidth))
+  val shiftRegs = Reg(Vec(constShiftStages, UInt(outputWidth.W))) // meaning Vec(constShiftStages,Reg(init = 0.U(outputWidth.W))) but chisel3 sucks
   val busyReg = Reg(init = Bool(false))
   val doneReg = Reg(init = Bool(false))
-  val countReg = Reg(init = UInt(constShiftStages - 1, width = log2Floor(constShiftStages) + 1))
-  val selHi = UInt()
-  val selLo = UInt()
+  val countReg = Reg(init = (constShiftStages - 1).U ((log2Floor(constShiftStages) + 1).W))
+  val selHi = Wire(0.U)
+  val selLo = Wire(0.U)
 
   // Shift-register
-  when(~busyReg && io.load) {
-    shiftReg := io.shiftIn
+  when(!busyReg && io.load) {
+
+    for(i <- 0 to constShiftStages-1)
+    {
+      shiftRegs(i) := io.shiftIn((i*outputWidth),0)
+    }
+
     busyReg := true.B
     doneReg := false.B
   }.elsewhen(io.en && busyReg) {
@@ -47,23 +55,19 @@ class Serializer(msbFirst: Boolean = false, inputWidth: Int = 8, outputWidth: In
     busyReg := false.B
   }
 
-  if (msbFirst) {
-    selHi := countReg * outputWidth.U + outputWidth.U - 1.U
-    selLo := countReg * outputWidth.U
-  } else {
-    selHi := (constShiftStages.U - 1.U - countReg) * outputWidth.U + outputWidth.U - 1.U
-    selLo := (constShiftStages.U - 1.U - countReg) * outputWidth.U
-  }
+//  if (msbFirst) {
+//    io.shiftOut := shiftRegs((constShiftStages-countReg))
+//  } else {
+//    io.shiftOut := shiftRegs(countReg)
+//  }
 
-  /**
-    * I/O plumbing
-    */
-  io.shiftOut := shiftReg(selHi, selLo)
+
+  io.shiftOut := shiftRegs(countReg)
   io.done := doneReg
   io.dv := busyReg
 }
 
 object Serializer extends App {
-  chiselMain(Array[String]("--backend", "v", "--targetDir", "generated/" + this.getClass.getSimpleName.dropRight(1)),
-    () => Module(new Serializer(false, 8, 4)))
+  chisel3.Driver.execute(Array("--target-dir", "generated"), () => new Serializer(false, 16, 4))
 }
+

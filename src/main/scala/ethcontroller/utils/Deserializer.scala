@@ -20,18 +20,18 @@ class Deserializer(msbFirst: Boolean = false, inputWidth: Int = 4, outputWidth: 
     val done = Bool(OUTPUT)
   }
 
-  val shiftReg = Reg(init = Bits(0, width = outputWidth))
+  val shiftReg = RegInit(0.U(outputWidth.W))
 
   // Shift-register
   when(io.clr) {
     shiftReg := 0.U
   }.elsewhen(io.en) {
     if (msbFirst) {
-      shiftReg(inputWidth - 1, 0) := io.shiftIn
-      shiftReg(outputWidth - 1, inputWidth) := shiftReg(outputWidth - inputWidth - 1, 0)
+      shiftReg := shiftReg(inputWidth - 1, 0) ## io.shiftIn
+      shiftReg:= shiftReg(outputWidth - 1, inputWidth) ## shiftReg(outputWidth - inputWidth - 1, 0)
     } else {
-      shiftReg(outputWidth - inputWidth - 1, 0) := shiftReg(outputWidth - 1, inputWidth)
-      shiftReg(outputWidth - 1, outputWidth - inputWidth) := io.shiftIn
+      shiftReg := shiftReg(outputWidth - inputWidth - 1, 0) ## shiftReg(outputWidth - 1, inputWidth)
+      shiftReg:= shiftReg(outputWidth - 1, outputWidth - inputWidth) ## io.shiftIn
     }
   }
 
@@ -58,7 +58,7 @@ class Deserializer(msbFirst: Boolean = false, inputWidth: Int = 4, outputWidth: 
   io.done := doneReg
 }
 
+
 object Deserializer extends App {
-  chiselMain(Array[String]("--backend", "v", "--targetDir", "generated/" + this.getClass.getSimpleName.dropRight(1)),
-    () => Module(new Deserializer(false, 4, 8)))
+  chisel3.Driver.execute(Array("--target-dir", "generated"), () => new Deserializer(false, 4, 8))
 }

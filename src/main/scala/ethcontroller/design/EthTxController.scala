@@ -17,9 +17,7 @@ import ocp._
 class EthTxController(numFrameBuffers: Int, timeStampWidth: Int) extends Module {
   val io = new Bundle() {
     val ocp = new OcpCoreSlavePort(32, 32)
-    val ramPorts = Vec.fill(numFrameBuffers) {
-      new OcpCoreMasterPort(32, 32)
-    }
+    val ramPorts = Vec(numFrameBuffers, new OcpCoreMasterPort(32, 32))
     val miiChannel = new MIIChannel()
     val rtcTimestamp = UInt(INPUT, width = timeStampWidth)
   }
@@ -71,8 +69,15 @@ class EthTxController(numFrameBuffers: Int, timeStampWidth: Int) extends Module 
     "macFilter" -> Map("Reg" -> macRxFilterReg, "Addr" -> Bits("h1C")) //0x1C
   )
 
-  val preambleReg = Reg(init = UInt(EthernetConstants.constSFD, width = 64))
-  val fcsReg = Reg(init = UInt(0, width = 16))
+  //val preambleReg = Reg(init = EthernetConstants.constSFD)
+  val constSFDbytes = 64/8
+  val preambleReg = Reg(Vec(constSFDbytes,UInt(8.W)))
+  for(i <- 0 to constSFDbytes-1)
+  {
+    preambleReg(i) := EthernetConstants.constSFD(8+8*i-1,i*8)
+  }
+  //val fcsReg = Reg(init = UInt(0, width = 16))
+  val fcsReg = Reg(Vec(2, UInt(8.W)))
 
   val miiByteDataReg = Reg(init = UInt(0, width = 8))
   val miiByteLoadReg = Reg(init = false.B)
@@ -162,8 +167,11 @@ class EthTxController(numFrameBuffers: Int, timeStampWidth: Int) extends Module 
   /**
     * Multiplexing MII byte source
     */
-  miiByteDataReg := RegNext(Mux(stateReg === stTxFCS, preambleReg(8.U + 8.U * byteCntReg - 1.U, 8.U * byteCntReg),
-    Mux(stateReg === stTxFCS, fcsReg(8.U + 8.U * byteCntReg - 1.U, 8.U * byteCntReg), ramDataReg)))
+
+
+  miiByteDataReg := RegNext(
+                          Mux(stateReg === stTxPreamble, preambleReg(byteCntReg),
+                                Mux(stateReg === stTxFCS, fcsReg(byteCntReg), ramDataReg)))
 
 
   /**
@@ -211,7 +219,7 @@ class EthTxController(numFrameBuffers: Int, timeStampWidth: Int) extends Module 
       }
     }.elsewhen(ocpMasterReg.Cmd === OcpCmd.WR) {
       when(ocpMasterReg.Addr(5, 0) === ethTxCtrlRegMap("txEn")("Addr")) {
-        ethTxCtrlRegMap("txEn")("Reg") := orR(ocpMasterReg.Data)
+        ethTxCtrlRegMap("txEn")("Reg") := ocpMasterReg.Data.orR()
         ocpRespReg := OcpResp.DVA
       }.elsewhen(ocpMasterReg.Addr(5, 0) === ethTxCtrlRegMap("frameSize")("Addr")) {
         ethTxCtrlRegMap("frameSize")("Reg") := ocpDataReg
@@ -225,7 +233,7 @@ class EthTxController(numFrameBuffers: Int, timeStampWidth: Int) extends Module 
       }.elsewhen(ocpMasterReg.Addr(5, 0) === ethTxCtrlRegMap("fifoPop")("Addr")) {
         ocpRespReg := OcpResp.ERR
       }.elsewhen(ocpMasterReg.Addr(5, 0) === ethTxCtrlRegMap("fifoPush")("Addr")) {
-        ethTxCtrlRegMap("fifoPush")("Reg") := orR(ocpMasterReg.Data) //set on write and reset in the next clock cycle
+        ethTxCtrlRegMap("fifoPush")("Reg") := ocpMasterReg.Data.orR() //set on write and reset in the next clock cycle
         ocpRespReg := OcpResp.DVA //is the responsibility of the master to check first the count ?
       }.elsewhen(ocpMasterReg.Addr(5, 0) === ethTxCtrlRegMap("macFilter")("Addr")) {
         ethTxCtrlRegMap("macFilter")("Reg") := ocpMasterReg.Data
@@ -244,13 +252,13 @@ class EthTxController(numFrameBuffers: Int, timeStampWidth: Int) extends Module 
   miiIsReady := miiTx.io.ready
   miiTx.io.macDataDv := miiByteLoadReg
   miiTx.io.macData := miiByteDataReg
-  miiTx.io.miiChannel <> io.miiChannel
+  io.miiChannel <> miiTx.io.miiChannel
   for (ramId <- 0 until numFrameBuffers) {
     io.ramPorts(ramId).M := ramMasterRegs(ramId)
   }
 }
 
+
 object EthTxController extends App {
-  chiselMain(Array[String]("--backend", "v", "--targetDir", "generated/" + this.getClass.getSimpleName.dropRight(1)),
-    () => Module(new EthTxController(2, 64)))
+  chisel3.Driver.execute(Array("--target-dir", "generated"), () => new EthTxController(2, 64))
 }
